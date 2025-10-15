@@ -46,7 +46,7 @@ This project combines the power of AI with browser automation to create a system
 
 1. **Clone the repository**:
 ```bash
-git clone https://github.com/yourusername/ai-playwright-automation.git
+git clone https://github.com/pietroconta/ai-playwright-automation.git
 cd ai-playwright-automation
 ```
 
