@@ -1,0 +1,7 @@
+{
+    "execution": {
+        "entrypoint_url": "https://clienteprova2.guru-hrm.it/",
+        "headless": false,
+        "steps_file": "aidriven-steps.json"
+    }
+}

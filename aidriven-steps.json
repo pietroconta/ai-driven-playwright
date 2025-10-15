@@ -1,0 +1,17 @@
+{
+    "steps": [
+         {
+            "sub_prompt": "Clicca sul login",
+            "timeout": "5000"
+        },
+         {
+            "sub_prompt": "Inserisci le credenziali username: pietro.contadini password: 1234QWe! e fai il login",
+            "timeout": "5000"
+        },
+        {
+            "sub_prompt": "Vai su cedolino",
+            "timeout": "5000"
+        }
+    ]
+
+}
