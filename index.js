@@ -5,11 +5,13 @@ import { chromium } from "playwright";
 import OpenAI from "openai";
 import { program } from "commander";
 import { Step } from "./models/step.js";
-import { MockOpenAI } from "./mock-openai.js";  // ← Import del mock
+import { MockOpenAI } from "./mock-openai.js"; // ← Import del mock
 
 /* -----------------------------------------------
    CONFIGURAZIONE
 -------------------------------------------------- */
+
+//TODO aggiungere opzione --nocache (non permette di eseguire codice /generated)
 program.option(
   "-m, --mode <type>",
   'Modalità di esecuzione: "config" o "interactive"',
@@ -22,9 +24,9 @@ program.option(
 program.parse(process.argv);
 const options = program.opts();
 
-const settings = !options.mock ? 
-JSON.parse(fs.readFileSync("aidriven-settings.json", "utf8"))  : 
-JSON.parse(fs.readFileSync("aidriven-settings.mock.json", "utf8"));
+const settings = !options.mock
+  ? JSON.parse(fs.readFileSync("aidriven-settings.json", "utf8"))
+  : JSON.parse(fs.readFileSync("aidriven-settings.mock.json", "utf8"));
 const { execution, ai_agent } = settings;
 
 var stepArr = [];
@@ -71,7 +73,13 @@ function ask(question) {
 /* -----------------------------------------------
      Generazione codice Playwright
 -------------------------------------------------- */
-async function generateAndGetPwCode(taskDescription, url, html, stepIndex) {
+async function generateAndGetPwCode(
+  taskDescription,
+  url,
+  html,
+  stepIndex,
+  stepId
+) {
   const prompt = `
 Sei un assistente che genera SOLO codice Playwright (senza test(), describe() o import).
 Genera codice che esegue ESATTAMENTE le seguenti azioni sulla pagina corrente:
@@ -91,7 +99,6 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
         content: "Sei un esperto di automazione browser con Playwright.",
       },
       { role: "user", content: `${prompt}\n\nHTML:\n${html}` },
-      
     ],
   });
 
@@ -101,12 +108,12 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
 
   const dir = "./generated/aidriven";
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const filePath = `${dir}/step${stepIndex}.js`;
+  const filePath = `${dir}/step-${stepId}.js`;
   fs.writeFileSync(filePath, code);
 
   console.log(`✅ Step ${stepIndex} generato in: ${filePath}`);
   //console.log("prompted token: ", response.usage.prompt_tokens);
-  
+
   return {
     code: code,
     tokenIn: response.usage.prompt_tokens,
@@ -123,7 +130,7 @@ function getTotalUsage(stepArr) {
   var totInToken = 0;
   var totOutToken = 0;
   var totCachedToken = 0;
-  
+
   for (const step of stepArr) {
     totInToken += step.inputToken || 0;
     totOutToken += step.outputToken || 0;
@@ -141,6 +148,32 @@ function getTotalUsage(stepArr) {
       totOutToken * (ai_agent.cost_output_token || 0) +
       totCachedToken * (ai_agent.cost_cached_token || 0),
   };
+}
+
+/* -----------------------------------------------
+     Metodo per aggiornare aidriven-steps.json/aidriven-steps.mock.json in base all'
+     array stepArr
+-------------------------------------------------- */
+
+function updateAiDrivenSteps() {
+  const output = {
+    steps: stepArr.map((step) => ({
+      id: step.id,
+      subPrompt: step.subPrompt,
+      timeout: step.timeout
+    })),
+  };
+
+  fs.writeFileSync(execution.steps_file, JSON.stringify(output, null, 2));
+}
+
+function getCachedCode(step){
+  var path = `step-${step.id}.js`;
+  if(fs.existsSync(path)){
+    return fs.readFileSync(path);
+  }else{
+    throw new Error(`Cache file not found for step "${step.subPrompt}"`);
+  }
 }
 
 /* -----------------------------------------------
@@ -199,20 +232,28 @@ function getTotalUsage(stepArr) {
     const html = await page.content();
 
     try {
+      var code = "";
+      if(step.cache){
+        code = getCachedCode(step);
+      }else{
       const responseObj = await generateAndGetPwCode(
         step.subPrompt,
         page.url(),
         html,
-        step.index
+        step.index,
+        step.id
       );
+
+      code = responseObj.code;
 
       step.inputToken = responseObj.tokenIn;
       step.outputToken = responseObj.tokenOut;
       step.cachedToken = responseObj.cachedToken;
 
+    }
       const asyncCode = `
         (async (page, expect) => {
-          ${responseObj.code}
+          ${code}
         })
       `;
       const fn = eval(asyncCode);
@@ -236,12 +277,12 @@ function getTotalUsage(stepArr) {
       break;
     }
   }
-  
+
   var usageObj = getTotalUsage(stepArr);
   console.log("\n🏁 Tutte le task completate.");
   //console.log("\n📊 Usage totale:");
   console.log(JSON.stringify(usageObj, null, 2));
-  
+
   await browser.close();
 
   const resultFile = "./generated/aidriven/run-log.json";
@@ -253,6 +294,6 @@ function getTotalUsage(stepArr) {
   };
 
   fs.writeFileSync(resultFile, JSON.stringify(output, null, 2));
-
+  updateAiDrivenSteps();
   console.log(`Log salvato in: ${resultFile}`);
 })();

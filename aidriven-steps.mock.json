@@ -1,9 +1,9 @@
 {
-    "steps": [
-         {
-            "sub_prompt": "Clicca sul login",
-            "timeout": "5000"
-        }
-    ]
-
+  "steps": [
+    {
+      "id": "6519ce9c",
+      "subPrompt": "Clicca sul login",
+      "timeout": "5000"
+    }
+  ]
 }

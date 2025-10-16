@@ -13,6 +13,7 @@
   "dependencies": {
     "@playwright/test": "^1.56.0",
     "commander": "^14.0.1",
+    "crypto": "^1.0.1",
     "dotenv": "^17.2.3",
     "openai": "^6.3.0"
   }

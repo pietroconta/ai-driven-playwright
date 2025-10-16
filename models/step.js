@@ -1,12 +1,20 @@
+import crypto from "crypto";
+import fs from "fs";
 export class Step {
  
   _inputToken = 0;
   _outputToken = 0;
   _cachedToken = 0;
   constructor({ index, subPrompt, timeout}) {
+    this.id = this._generateId(subPrompt);
+    this.cache = fs.existsSync(`step-${id}.js`);
     this.subPrompt = subPrompt;
     this.index = index;
     this.timeout = timeout;
+  }
+
+  _generateId(subPrompt) {
+    return crypto.createHash("md5").update(subPrompt).digest("hex").slice(0, 8);
   }
 
   get _cachedToken(){
