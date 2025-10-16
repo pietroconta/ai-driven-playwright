@@ -3,14 +3,6 @@
          {
             "sub_prompt": "Clicca sul login",
             "timeout": "5000"
-        },
-         {
-            "sub_prompt": "Inserisci le credenziali username: XXXXXXX password: XXXXXXX e fai il login",
-            "timeout": "5000"
-        },
-        {
-            "sub_prompt": "Vai su cedolino",
-            "timeout": "5000"
         }
     ]
 

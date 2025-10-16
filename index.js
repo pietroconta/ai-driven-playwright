@@ -9,7 +9,7 @@ import { Step } from "./models/step.js";
 /* -----------------------------------------------
    CONFIGURAZIONE (comportamento esecuzione in base ai parametri dati all'avvio, comportamento del driven ai, step ecc)
 -------------------------------------------------- */
-
+//todo: timestamp su json, token in and token out
 program.option(
   "-m, --mode <type>",
   'Modalità di esecuzione: "config" o "interactive"',
@@ -18,9 +18,9 @@ program.option(
 program.parse(process.argv);
 const options = program.opts();
 
-const { execution } = JSON.parse(
-  fs.readFileSync("aidriven-settings.json", "utf8")
-);
+const settings = JSON.parse(fs.readFileSync("aidriven-settings.json", "utf8"));
+const { execution, ai_agent } = settings;
+
 var stepArr = [];
 var isHeadless = execution.headless;
 
@@ -31,8 +31,7 @@ var isNotInpt = !options.mode || options.mode == "config";
 -------------------------------------------------- */
 const client = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
-  baseURL:
-    "https://afp-ai-for-test-resource.openai.azure.com/openai/deployments/gpt-4o",
+  baseURL: ai_agent.endpoint, //endpoint dentro il file di config aidriven-settings.json
   defaultQuery: { "api-version": "2024-12-01-preview" },
 });
 
@@ -73,12 +72,7 @@ function ask(question) {
    - File ./generated/stepX.js contenente il codice
    - Restituisce la stringa JS del codice generato
 -------------------------------------------------- */
-async function generatePlaywrightActions(
-  taskDescription,
-  url,
-  html,
-  stepIndex
-) {
+async function generateAndGetPwCode(taskDescription, url, html, stepIndex) {
   const prompt = `
 Sei un assistente che genera SOLO codice Playwright (senza test(), describe() o import).
 Genera codice che esegue ESATTAMENTE le seguenti azioni sulla pagina corrente:
@@ -114,7 +108,45 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
   fs.writeFileSync(filePath, code);
 
   console.log(`✅ Step ${stepIndex} generato in: ${filePath}`);
-  return code;
+  console.log("prompted token: ", response.usage.prompt_tokens);
+  return {
+    code: code,
+    tokenIn: response.usage.prompt_tokens,
+    tokenOut: response.usage.completion_tokens,
+    cachedToken: response.usage.prompt_tokens_details.cached_tokens,
+  };
+  //return code;
+}
+
+/* -----------------------------------------------
+   Funzione che passandogli un array di Step ritorna
+   un oggetto che contiene:
+        total_token: x
+        input_token: x
+        output_token: x
+        calculated_cost: x
+-------------------------------------------------- */
+function getTotalUsage(stepArr) {
+  var totToken = 0;
+  var totInToken = 0;
+  var totOutToken = 0;
+  var totCachedToken = 0;
+  for (var step in stepArr) {
+    totInToken += step.inputToken;
+    totOutToken += step.outputToken;
+    totToken += step.inputToken + step.outputToken;
+    totCachedToken += step.cachedToken;
+  }
+
+  return {
+    total_token: totToken,
+    input_token: totInToken,
+    output_token: totOutToken,
+    calculated_cost:
+      totInToken * ai_agent.cost_input_token +
+      totOutToken * ai_agent.cost_output_token +
+      totCachedToken * ai_agent.cost_cached_token,
+  };
 }
 
 /* -----------------------------------------------
@@ -162,7 +194,7 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
       (s, i) =>
         new Step({
           index: i + 1,
-          subPrompt: s.sub_prompt ,
+          subPrompt: s.sub_prompt,
           timeout: s.timeout || 10000,
         })
     );
@@ -188,17 +220,22 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
 
     try {
       // Genera codice Playwright con AI
-      const code = await generatePlaywrightActions(
+      const responseObj = await generateAndGetPwCode(
         step.subPrompt,
         page.url(),
         html,
         step.index
       );
 
+      //assegno all'oggetto step il numero dei token
+      step.inputToken = responseObj.tokenIn;
+      step.outputToken = responseObj.tokenOut;
+      step.cachedToken = responseObj.cachedToken;
+
       // Esegue il codice generato
       const asyncCode = `
         (async (page, expect) => {
-          ${code}
+          ${responseObj.code}
         })
       `;
       const fn = eval(asyncCode);
@@ -222,12 +259,19 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
       break;
     }
   }
-
+  var usageObj = getTotalUsage(stepArr);
   console.log("\n🏁 Tutte le task completate.");
   await browser.close();
 
   // Salva risultati in un file JSON
   const resultFile = "./generated/aidriven/run-log.json";
-  fs.writeFileSync(resultFile, JSON.stringify(results, null, 2));
+
+  const output = {
+    results,
+    usage: usageObj,
+  };
+
+  fs.writeFileSync(resultFile, JSON.stringify(output, null, 2));
+
   console.log(`Log salvato in: ${resultFile}`);
 })();
