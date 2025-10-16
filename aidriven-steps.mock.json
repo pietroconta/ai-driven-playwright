@@ -1,0 +1,9 @@
+{
+    "steps": [
+         {
+            "sub_prompt": "Clicca sul login",
+            "timeout": "5000"
+        }
+    ]
+
+}

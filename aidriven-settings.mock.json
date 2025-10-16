@@ -1,0 +1,14 @@
+{
+    "execution": {
+        "entrypoint_url": "https://clienteprova2.guru-hrm.it/",
+        "headless": false,
+        "steps_file": "aidriven-steps.mock.json"
+    },
+    "ai_agent":{
+        "type": "gpt-4o",
+        "endpoint": "https://justmockfakersource.com/ai/gpt-40",
+        "cost_input_token": "0.000005",
+        "cost_output_token": "0.00002",
+        "cost_cached_token": "0.0000025"
+    }
+}
