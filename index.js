@@ -1,22 +1,14 @@
 import "dotenv/config";
 import fs from "fs";
-import readline from "readline";
 import { chromium } from "playwright";
 import OpenAI from "openai";
 import { program } from "commander";
 import { Step } from "./models/step.js";
-import { MockOpenAI } from "./mock-openai.js"; // ← Import del mock
+import { MockOpenAI } from "./mock-openai.js";
 
 /* -----------------------------------------------
    CONFIGURAZIONE
 -------------------------------------------------- */
-
-//TODO aggiungere opzione --nocache (non permette di eseguire codice /generated)
-program.option(
-  "-m, --mode <type>",
-  'Modalità di esecuzione: "config" o "interactive"',
-  "config"
-);
 program.option(
   "--mock",
   "Usa mock OpenAI invece di chiamate API reali (per debug)"
@@ -34,7 +26,6 @@ var isHeadless = execution.headless;
 
 /* -----------------------------------------------
    CONFIGURAZIONE CLIENT OPENAI 
-   Usa MockOpenAI se --mock è attivo
 -------------------------------------------------- */
 const client = options.mock
   ? new MockOpenAI({
@@ -55,20 +46,6 @@ if (options.mock) {
      Utility functions
 -------------------------------------------------- */
 const pauseOf = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-function ask(question) {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
-
-  return new Promise((resolve) =>
-    rl.question(question, (answer) => {
-      rl.close();
-      resolve(answer);
-    })
-  );
-}
 
 /* -----------------------------------------------
      Generazione codice Playwright
@@ -112,7 +89,6 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
   fs.writeFileSync(filePath, code);
 
   console.log(`✅ Step ${stepIndex} generato in: ${filePath}`);
-  //console.log("prompted token: ", response.usage.prompt_tokens);
 
   return {
     code: code,
@@ -151,10 +127,8 @@ function getTotalUsage(stepArr) {
 }
 
 /* -----------------------------------------------
-     Metodo per aggiornare aidriven-steps.json/aidriven-steps.mock.json in base all'
-     array stepArr
+     Aggiorna file steps
 -------------------------------------------------- */
-
 function updateAiDrivenSteps() {
   const output = {
     steps: stepArr.map((step) => ({
@@ -167,11 +141,14 @@ function updateAiDrivenSteps() {
   fs.writeFileSync(execution.steps_file, JSON.stringify(output, null, 2));
 }
 
-function getCachedCode(step){
-  var path = `step-${step.id}.js`;
-  if(fs.existsSync(path)){
-    return fs.readFileSync(path);
-  }else{
+/* -----------------------------------------------
+     Recupera codice dalla cache
+-------------------------------------------------- */
+function getCachedCode(step) {
+  var path = `./generated/aidriven/step-${step.id}.js`;
+  if (fs.existsSync(path)) {
+    return fs.readFileSync(path, "utf8");
+  } else {
     throw new Error(`Cache file not found for step "${step.subPrompt}"`);
   }
 }
@@ -180,40 +157,18 @@ function getCachedCode(step){
      MAIN SCRIPT
 -------------------------------------------------- */
 (async () => {
-  let url;
-  let steps = [];
-
-  if (options.mode === "interactive") {
-    console.log("Modalità INTERACTIVE.");
-
-    url = await ask("Inserisci l'URL iniziale: ");
-    const fullTask = await ask(
-      "Descrivi le azioni (es: 'clicca login, inserisci username e password, vai alla dashboard'): "
-    );
-
-    const taskList = fullTask.split(",").map((t) => t.trim());
-
-    stepArr = taskList.map(
-      (t, i) =>
-        new Step({
-          index: i + 1,
-          subPrompt: t,
-          timeout: 10000,
-        })
-    );
-  } else {
-    const data = JSON.parse(fs.readFileSync(execution.steps_file, "utf8"));
-    steps = data.steps;
-    url = execution.entrypoint_url;
-    stepArr = steps.map(
-      (s, i) =>
-        new Step({
-          index: i + 1,
-          subPrompt: s.sub_prompt,
-          timeout: s.timeout || 10000,
-        })
-    );
-  }
+  const data = JSON.parse(fs.readFileSync(execution.steps_file, "utf8"));
+  const steps = data.steps;
+  const url = execution.entrypoint_url;
+  
+  stepArr = steps.map(
+    (s, i) =>
+      new Step({
+        index: i + 1,
+        subPrompt: s.sub_prompt,
+        timeout: s.timeout || 10000,
+      })
+  );
 
   console.log(`\nEntry Point URL: ${url}`);
   console.log(`Numero step da eseguire: ${stepArr.length}`);
@@ -233,24 +188,24 @@ function getCachedCode(step){
 
     try {
       var code = "";
-      if(step.cache){
+      if (step.cache) {
         code = getCachedCode(step);
-      }else{
-      const responseObj = await generateAndGetPwCode(
-        step.subPrompt,
-        page.url(),
-        html,
-        step.index,
-        step.id
-      );
+        console.log(`📦 Usando codice dalla cache`);
+      } else {
+        const responseObj = await generateAndGetPwCode(
+          step.subPrompt,
+          page.url(),
+          html,
+          step.index,
+          step.id
+        );
 
-      code = responseObj.code;
+        code = responseObj.code;
+        step.inputToken = responseObj.tokenIn;
+        step.outputToken = responseObj.tokenOut;
+        step.cachedToken = responseObj.cachedToken;
+      }
 
-      step.inputToken = responseObj.tokenIn;
-      step.outputToken = responseObj.tokenOut;
-      step.cachedToken = responseObj.cachedToken;
-
-    }
       const asyncCode = `
         (async (page, expect) => {
           ${code}
@@ -280,7 +235,6 @@ function getCachedCode(step){
 
   var usageObj = getTotalUsage(stepArr);
   console.log("\n🏁 Tutte le task completate.");
-  //console.log("\n📊 Usage totale:");
   console.log(JSON.stringify(usageObj, null, 2));
 
   await browser.close();
