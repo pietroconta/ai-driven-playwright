@@ -1,6 +1,6 @@
 {
     "execution": {
-        "entrypoint_url": "https://clienteprova2.guru-hrm.it/",
+        "entrypoint_url": "https://clientecollaudo1.livrea.eu/account/login",
         "headless": false,
         "steps_file": "aidriven-steps.json"
     },

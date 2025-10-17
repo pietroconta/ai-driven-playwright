@@ -10,5 +10,6 @@
         "cost_input_token": "0.000005",
         "cost_output_token": "0.00002",
         "cost_cached_token": "0.0000025"
-    }
+    },
+    "hc_code": "await expect(page.locator('#btnLoginHrCore')).toBeVisible(); await page.click('#btnLoginHrCore');"
 }

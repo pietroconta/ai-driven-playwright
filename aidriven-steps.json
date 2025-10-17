@@ -1,9 +1,19 @@
 {
-    "steps": [
-         {
-            "sub_prompt": "Clicca sul login",
-            "timeout": "5000"
-        }
-    ]
-
+  "steps": [
+    {
+      "id": "aa9c1054",
+      "sub_prompt": "Attendi il caricamento completato, Clicca su accesso",
+      "timeout": "10000"
+    },
+    {
+      "id": "66e265a6",
+      "sub_prompt": "Inserisci sul campo username pietro.contadini e nel campo password AaN!7aa e clicca Login",
+      "timeout": "10000"
+    },
+    {
+      "id": "a1ac11fb",
+      "sub_prompt": "Vai sul menu a tendina: Analisys > Smart compare",
+      "timeout": "5000"
+    }
+  ]
 }

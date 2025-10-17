@@ -1,6 +1,5 @@
 // mock-openai.js
 // Simula le risposte di OpenAI per il debugging senza costi
-
 export class MockOpenAI {
   constructor(config) {
     this.config = config;
@@ -42,7 +41,8 @@ export class MockOpenAI {
   };
 
   generateMockCode(prompt) {
-    return `await expect(page.locator('#btnLoginHrCore')).toBeVisible();
-await page.click('#btnLoginHrCore');`;
+   /* return `await expect(page.locator('#btnLoginHrCore')).toBeVisible();
+await page.click('#btnLoginHrCore');`;*/
+    return `${this.config.hardCode}`;
   }
 }

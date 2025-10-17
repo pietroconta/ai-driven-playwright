@@ -13,7 +13,11 @@ import { MockOpenAI } from "./mock-openai.js";
 //TODO: implement --nocache
 program
   .option("--mock", "Usa mock OpenAI invece di chiamate API reali (per debug)")
-  .option("--strength <level>", "Livello di forza AI (onlycache, medium, high)", "medium")
+  .option(
+    "--strength <level>",
+    "Livello di forza AI (onlycache, medium, high)",
+    "medium"
+  )
   .option("--nocache", "Disabilita completamente l'uso della cache");
 
 program.parse(process.argv);
@@ -37,7 +41,7 @@ switch (strength) {
     break;
 }
 
-if(noCache && strength == "onlycache"){
+if (noCache && strength == "onlycache") {
   console.log("--strength onlycache e --nocache sono ozpioni incompatibili");
   process.exit(1);
 }
@@ -61,6 +65,7 @@ const client = options.mock
   ? new MockOpenAI({
       apiKey: "mock-key",
       baseURL: "mock-url",
+      hardCode: settings.hc_code,
     })
   : new OpenAI({
       apiKey: process.env.OPENAI_API_KEY,
@@ -105,7 +110,10 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
   const response = await client.chat.completions.create({
     model: "gpt-4o",
     messages: [
-      { role: "system", content: "Sei un esperto di automazione browser con Playwright." },
+      {
+        role: "system",
+        content: "Sei un esperto di automazione browser con Playwright.",
+      },
       { role: "user", content: `${prompt}\n\nHTML:\n${html}` },
     ],
   });
@@ -165,7 +173,7 @@ function updateAiDrivenSteps() {
     steps: stepArr.map((step) => ({
       id: step.id,
       sub_prompt: step.subPrompt,
-      timeout: step.timeout
+      timeout: step.timeout,
     })),
   };
 
@@ -191,7 +199,7 @@ function getCachedCode(step) {
   const data = JSON.parse(fs.readFileSync(execution.steps_file, "utf8"));
   const steps = data.steps;
   const url = execution.entrypoint_url;
-  
+
   stepArr = steps.map(
     (s, i) =>
       new Step({
@@ -200,6 +208,27 @@ function getCachedCode(step) {
         timeout: s.timeout || 10000,
       })
   );
+
+  if (strength === "onlycache") {
+    const missingCache = stepArr.filter((step) => !step.cache);
+
+    if (missingCache.length > 0) {
+      console.error("\n❌ ERRORE: Cache mancante per i seguenti step:");
+      missingCache.forEach((step) => {
+        console.error(`   - Step ${step.index}: "${step.subPrompt}"`);
+        console.error(
+          `     File atteso: ./generated/aidriven/step-${step.id}.js`
+        );
+      });
+
+      console.error(
+        "\n💡 Suggerimento: Esegui prima con --strength medium o --strength high per generare la cache"
+      );
+      process.exit(1);
+    }
+
+    console.log("✅ Cache completa validata\n");
+  }
 
   console.log(`\nEntry Point URL: ${url}`);
   console.log(`Numero step da eseguire: ${stepArr.length}`);
@@ -213,65 +242,109 @@ function getCachedCode(step) {
   const results = [];
 
   for (const step of stepArr) {
+    while (step.attemps > 0 && !step.success) {
+      step.logStart();
 
-    while(step.attemps > 0 && !step.success){
-    step.logStart();
-    
-    const html = await page.content();
+      const html = await page.content();
 
-    try {
-      var code = "";
-      if (step.cache && !noCache) {
-        code = getCachedCode(step);
-        console.log(`📦 Usando codice dalla cache`);
-        step.cache = false;
-      } else {
-        const errorMsg = step.attemps === 1 && strength == "high" && step.error ? step.error.message : null;
-        const responseObj = await generateAndGetPwCode(
-          step.subPrompt,
-          page.url(),
-          html,
-          step.index,
-          step.id,
-          errorMsg
-        );
+      try {
+        var code = "";
+        if (step.cache && !noCache) {
+          try {
+            code = getCachedCode(step);
+            console.log(`📦 Usando codice dalla cache`);
+          } catch (cacheError) {
+            // Gestione specifica per cache mancante in modalità onlycache
+            if (strength === "onlycache") {
+              console.error(
+                `❌ ERRORE CRITICO: Cache mancante per step ${step.index} in modalità onlycache`
+              );
+              console.error(
+                `   File atteso: ./generated/aidriven/step-${step.id}.js`
+              );
 
-        code = responseObj.code;
-        step.inputToken = responseObj.tokenIn;
-        step.outputToken = responseObj.tokenOut;
-        step.cachedToken = responseObj.cachedToken;
-      }
+              results.push({
+                index: step.index,
+                prompt: step.subPrompt,
+                status: "error",
+                error: "Cache not found (onlycache mode)",
+                critical: true,
+              });
 
-      const asyncCode = `
+              // Esci dal loop e ferma l'esecuzione
+              step.attemps = 0;
+              step.success = false;
+              step.error = cacheError;
+
+              // Opzionale: ferma completamente l'esecuzione
+              throw new Error(
+                `Esecuzione interrotta: cache mancante per step "${step.subPrompt}" in modalità onlycache`
+              );
+            }
+
+            // Se non siamo in onlycache, rilanciamo l'errore per gestione normale
+            throw cacheError;
+          }
+          step.cache = false;
+        } else {
+          // Generazione normale del codice
+          const errorMsg =
+            step.attemps === 1 && strength == "high" && step.error
+              ? step.error.message
+              : null;
+          const responseObj = await generateAndGetPwCode(
+            step.subPrompt,
+            page.url(),
+            html,
+            step.index,
+            step.id,
+            errorMsg
+          );
+
+          code = responseObj.code;
+          step.inputToken = responseObj.tokenIn;
+          step.outputToken = responseObj.tokenOut;
+          step.cachedToken = responseObj.cachedToken;
+        }
+
+        const asyncCode = `
         (async (page, expect) => {
           ${code}
         })
       `;
-      const fn = eval(asyncCode);
-      await fn(page, expect);
-    
-      step.success = true;
-      step.logSuccess();
-      results.push({
-        index: step.index,
-        prompt: step.subPrompt,
-        status: "success",
-      });
-      await pauseOf(step.timeout);
-    } catch (err) {
-      step.logError(err);
-      step.error = err;
-      results.push({
-        index: step.index,
-        prompt: step.subPrompt,
-        status: "error",
-        error: err.message,
-      });
-      //break;
-    }finally{
-      step.attemps--;
-    }
-    
+        const fn = eval(asyncCode);
+        await fn(page, expect);
+
+        step.success = true;
+        step.logSuccess();
+        results.push({
+          index: step.index,
+          prompt: step.subPrompt,
+          status: "success",
+        });
+        await pauseOf(step.timeout);
+      } catch (err) {
+        step.logError(err);
+        step.error = err;
+
+        // Se siamo in onlycache e l'errore è critico, interrompi tutto
+        if (
+          strength === "onlycache" &&
+          err.message.includes("Cache file not found")
+        ) {
+          await browser.close();
+          process.exit(1);
+        }
+
+        results.push({
+          index: step.index,
+          prompt: step.subPrompt,
+          status: "error",
+          error: err.message,
+        });
+      } finally {
+        step.attemps--;
+      }
     }
   }
 
