@@ -133,7 +133,7 @@ function updateAiDrivenSteps() {
   const output = {
     steps: stepArr.map((step) => ({
       id: step.id,
-      subPrompt: step.subPrompt,
+      sub_prompt: step.subPrompt,
       timeout: step.timeout
     })),
   };
