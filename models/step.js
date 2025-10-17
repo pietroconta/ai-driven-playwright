@@ -1,44 +1,26 @@
 import crypto from "crypto";
 import fs from "fs";
+
 export class Step {
- 
-  _inputToken = 0;
-  _outputToken = 0;
-  _cachedToken = 0;
-  constructor({ index, subPrompt, timeout}) {
+  static maxAttempts = 1; 
+  static cacheFirst = true; 
+  constructor({ index, subPrompt, timeout }) {
     this.id = this._generateId(subPrompt);
-    this.cache = fs.existsSync(`step-${id}.js`);
+    this.cache = Step.cacheFirst ? fs.existsSync(`./generated/aidriven/step-${this.id}.js`) : false;
     this.subPrompt = subPrompt;
     this.index = index;
     this.timeout = timeout;
+    this.inputToken = 0;
+    this.outputToken = 0;
+    this.cachedToken = 0;
+    this.attemps = Step.maxAttempts;
+    this.success = false;
+    this.error = "";
   }
 
   _generateId(subPrompt) {
+    // console.log(subPrompt);
     return crypto.createHash("md5").update(subPrompt).digest("hex").slice(0, 8);
-  }
-
-  get _cachedToken(){
-    return this._inputToken;
-  }
-
-  set _cachedToken(_cachedToken){
-    this._cachedToken = _cachedToken;
-  }
-
-  get _inputToken(){
-    return this._inputToken;
-  }
-
-  set _inputToken(_inputToken){
-    this._inputToken = _inputToken;
-  }
-
-  get _outputToken(){
-    return this._outputToken;
-  }
-
-  set _outputToken(_outputToken){
-    this._outputToken = _outputToken;
   }
 
   logStart() {

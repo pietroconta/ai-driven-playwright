@@ -9,12 +9,42 @@ import { MockOpenAI } from "./mock-openai.js";
 /* -----------------------------------------------
    CONFIGURAZIONE
 -------------------------------------------------- */
-program.option(
-  "--mock",
-  "Usa mock OpenAI invece di chiamate API reali (per debug)"
-);
+//TODO: implement --strength onlycache, --strength medium, --strenght high
+//TODO: implement --nocache
+program
+  .option("--mock", "Usa mock OpenAI invece di chiamate API reali (per debug)")
+  .option("--strength <level>", "Livello di forza AI (onlycache, medium, high)", "medium")
+  .option("--nocache", "Disabilita completamente l'uso della cache");
+
 program.parse(process.argv);
 const options = program.opts();
+
+const strength = options.strength;
+const noCache = options.nocache;
+
+switch (strength) {
+  case "onlycache":
+    Step.maxAttempts = 1;
+    Step.cacheFirst = true;
+    break;
+  case "medium":
+    Step.maxAttempts = 2; // cache, poi API
+    Step.cacheFirst = true;
+    break;
+  case "high":
+    Step.maxAttempts = 3; // cache, poi API x2
+    Step.cacheFirst = true;
+    break;
+}
+
+if(noCache && strength == "onlycache"){
+  console.log("--strength onlycache e --nocache sono ozpioni incompatibili");
+  process.exit(1);
+}
+
+if (noCache) {
+  Step.cacheFirst = false;
+}
 
 const settings = !options.mock
   ? JSON.parse(fs.readFileSync("aidriven-settings.json", "utf8"))
@@ -38,10 +68,6 @@ const client = options.mock
       defaultQuery: { "api-version": "2024-12-01-preview" },
     });
 
-if (options.mock) {
-  console.log("🔧 MODALITÀ MOCK ATTIVA - Nessun costo API");
-}
-
 /* -----------------------------------------------
      Utility functions
 -------------------------------------------------- */
@@ -55,14 +81,22 @@ async function generateAndGetPwCode(
   url,
   html,
   stepIndex,
-  stepId
+  stepId,
+  errorMessage = null
 ) {
-  const prompt = `
+  let prompt = `
 Sei un assistente che genera SOLO codice Playwright (senza test(), describe() o import).
 Genera codice che esegue ESATTAMENTE le seguenti azioni sulla pagina corrente:
 "${taskDescription}"
 
 La pagina corrente è: ${url}
+`;
+
+  if (errorMessage) {
+    prompt += `\nATTENZIONE: Il tentativo precedente ha fallito con questo errore:\n"${errorMessage}"\nCorreggi il codice tenendo conto di questo problema.`;
+  }
+
+  prompt += `
 Devi usare l'oggetto "page" già aperto (non aprire un nuovo browser o una nuova pagina).
 Puoi anche usare "expect" se serve per validare elementi visibili o testi.
 Non aggiungere testo extra, solo codice JavaScript eseguibile.
@@ -71,10 +105,7 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
   const response = await client.chat.completions.create({
     model: "gpt-4o",
     messages: [
-      {
-        role: "system",
-        content: "Sei un esperto di automazione browser con Playwright.",
-      },
+      { role: "system", content: "Sei un esperto di automazione browser con Playwright." },
       { role: "user", content: `${prompt}\n\nHTML:\n${html}` },
     ],
   });
@@ -91,7 +122,7 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
   console.log(`✅ Step ${stepIndex} generato in: ${filePath}`);
 
   return {
-    code: code,
+    code,
     tokenIn: response.usage.prompt_tokens,
     tokenOut: response.usage.completion_tokens,
     cachedToken: response.usage.prompt_tokens_details.cached_tokens,
@@ -182,22 +213,27 @@ function getCachedCode(step) {
   const results = [];
 
   for (const step of stepArr) {
-    step.logStart();
 
+    while(step.attemps > 0 && !step.success){
+    step.logStart();
+    
     const html = await page.content();
 
     try {
       var code = "";
-      if (step.cache) {
+      if (step.cache && !noCache) {
         code = getCachedCode(step);
         console.log(`📦 Usando codice dalla cache`);
+        step.cache = false;
       } else {
+        const errorMsg = step.attemps === 1 && strength == "high" && step.error ? step.error.message : null;
         const responseObj = await generateAndGetPwCode(
           step.subPrompt,
           page.url(),
           html,
           step.index,
-          step.id
+          step.id,
+          errorMsg
         );
 
         code = responseObj.code;
@@ -213,7 +249,8 @@ function getCachedCode(step) {
       `;
       const fn = eval(asyncCode);
       await fn(page, expect);
-
+    
+      step.success = true;
       step.logSuccess();
       results.push({
         index: step.index,
@@ -223,13 +260,18 @@ function getCachedCode(step) {
       await pauseOf(step.timeout);
     } catch (err) {
       step.logError(err);
+      step.error = err;
       results.push({
         index: step.index,
         prompt: step.subPrompt,
         status: "error",
         error: err.message,
       });
-      break;
+      //break;
+    }finally{
+      step.attemps--;
+    }
+    
     }
   }
 
