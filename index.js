@@ -246,6 +246,7 @@ function getCachedCode(step) {
       step.logStart();
 
       const html = await page.content();
+      const body = await page.$eval('body', el => el.outerHTML);
 
       try {
         var code = "";
@@ -295,7 +296,7 @@ function getCachedCode(step) {
           const responseObj = await generateAndGetPwCode(
             step.subPrompt,
             page.url(),
-            html,
+            body,
             step.index,
             step.id,
             errorMsg
