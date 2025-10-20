@@ -2,7 +2,7 @@
   "steps": [
     {
       "id": "aa9c1054",
-      "sub_prompt": "Attendi il caricamento completato, Clicca su accesso",
+      "sub_prompt": "Attendi il caricamento completato, Clicca su login",
       "timeout": "10000"
     },
     {
