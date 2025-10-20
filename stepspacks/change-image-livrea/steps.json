@@ -3,17 +3,17 @@
     {
       "id": "73443201",
       "sub_prompt": "Attendi il caricamento completato, Clicca su login",
-      "timeout": "10000"
+      "timeout": "8000"
     },
     {
       "id": "66e265a6",
       "sub_prompt": "Inserisci sul campo username pietro.contadini e nel campo password AaN!7aa e clicca Login",
-      "timeout": "10000"
+      "timeout": "13000"
     },
     {
-      "id": "a1ac11fb",
-      "sub_prompt": "Vai sul menu a tendina: Analisys > Smart compare",
-      "timeout": "5000"
+      "id": "acb1ea27",
+      "sub_prompt": "Clicca sui 3 puntini a destra nel div del profilo poi clicca su a con id #btn_modifica_foto",
+      "timeout": "8000"
     }
   ]
 }

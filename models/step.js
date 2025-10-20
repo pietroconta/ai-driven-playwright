@@ -4,9 +4,17 @@ import fs from "fs";
 export class Step {
   static maxAttempts = 1; 
   static cacheFirst = true; 
-  constructor({ index, subPrompt, timeout }) {
+  constructor({ index, subPrompt, timeout, stepPath }) {
     this.id = this._generateId(subPrompt);
-    this.cache = Step.cacheFirst ? fs.existsSync(`./generated/aidriven/step-${this.id}.js`) : false;
+    let steps = stepPath
+        ? `${stepPath}/step-${this.id}.js`
+        : `generated/aidriven/step-${this.id}.js`;
+    this.cache = Step.cacheFirst
+  ? fs.existsSync(
+      steps
+    )
+  : false;
+    //console.log(`cache dello step index ${index}: `, this.cache);
     this.subPrompt = subPrompt;
     this.index = index;
     this.timeout = timeout;

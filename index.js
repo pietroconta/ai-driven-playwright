@@ -1,3 +1,18 @@
+//TODO: risolvere problemi di sincronizzazione (se c'è una latenza del server il timeout dello step 
+// è statico quindi, se la pagina non è ancora caricata, lo step verrà eseguito causando errore oppure no?)
+//TODO: migliorare lancio errori
+//TODO: risolvere problema: impossibilità dell'agent di trovare un selettore che non esiste
+// ancora (non esiste prima di un cick o un evento particolare), soluzioni:
+// prendere la differenza html prima e dopo di uno step fallito causa: selettore non trovato
+// mandarlo all'agent con l'errore del selettore non trovato, la differenza dei 2 html e con
+// lo scopo di rigenerare il codice con la differenza
+// pro: risoluzione errore
+// contro: aumento notevole dei costi di testing nei workflow piu complessi
+
+// ============================================
+// FILE: index.js (MODIFICHE)
+// ============================================
+import dotenv from "dotenv";
 import "dotenv/config";
 import fs from "fs";
 import { chromium } from "playwright";
@@ -5,12 +20,10 @@ import OpenAI from "openai";
 import { program } from "commander";
 import { Step } from "./models/step.js";
 import { MockOpenAI } from "./mock-openai.js";
-
+import { JSDOM } from "jsdom";
 /* -----------------------------------------------
-   CONFIGURAZIONE
+   CONFIGURAZIONE CLI
 -------------------------------------------------- */
-//TODO: implement --strength onlycache, --strength medium, --strenght high
-//TODO: implement --nocache
 program
   .option("--mock", "Usa mock OpenAI invece di chiamate API reali (per debug)")
   .option(
@@ -18,31 +31,44 @@ program
     "Livello di forza AI (onlycache, medium, high)",
     "medium"
   )
-  .option("--nocache", "Disabilita completamente l'uso della cache");
+  .option("--nocache", "Disabilita completamente l'uso della cache")
+  .option(
+    "--stepspack <name>",
+    "Usa un pack di steps dalla cartella ./stepspacks/<name>"
+  );
 
 program.parse(process.argv);
 const options = program.opts();
 
 const strength = options.strength;
 const noCache = options.nocache;
+const stepsPack = options.stepspack;
 
+/* -----------------------------------------------
+   VALIDAZIONE OPZIONI
+-------------------------------------------------- */
 switch (strength) {
   case "onlycache":
     Step.maxAttempts = 1;
     Step.cacheFirst = true;
     break;
   case "medium":
-    Step.maxAttempts = 2; // cache, poi API
+    Step.maxAttempts = 2;
     Step.cacheFirst = true;
     break;
   case "high":
-    Step.maxAttempts = 3; // cache, poi API x2
+    Step.maxAttempts = 3;
     Step.cacheFirst = true;
     break;
 }
 
 if (noCache && strength == "onlycache") {
-  console.log("--strength onlycache e --nocache sono ozpioni incompatibili");
+  console.log("--strength onlycache e --nocache sono opzioni incompatibili");
+  process.exit(1);
+}
+
+if (options.mock && stepsPack) {
+  console.log("--mock e --stepspack sono opzioni incompatibili");
   process.exit(1);
 }
 
@@ -50,16 +76,72 @@ if (noCache) {
   Step.cacheFirst = false;
 }
 
-const settings = !options.mock
-  ? JSON.parse(fs.readFileSync("aidriven-settings.json", "utf8"))
-  : JSON.parse(fs.readFileSync("aidriven-settings.mock.json", "utf8"));
-const { execution, ai_agent } = settings;
+/* -----------------------------------------------
+   CARICAMENTO CONFIGURAZIONE (CON STEPSPACK)
+-------------------------------------------------- */
+let settings;
+let stepsPackPath = null;
+let outputDir = "./generated/aidriven";
 
+if (stepsPack) {
+  // Modalità StepsPack
+  stepsPackPath = `./stepspacks/${stepsPack}`;
+
+  if (stepsPackPath && fs.existsSync(`${stepsPackPath}/.env`)) {
+    dotenv.config({ path: `${stepsPackPath}/.env` });
+    console.log("API key caricata da StepsPack .env");
+  }
+
+  if (!fs.existsSync(stepsPackPath)) {
+    console.error(`❌ ERRORE: StepsPack non trovato: ${stepsPackPath}`);
+    console.error(`Cartelle disponibili in ./stepspacks/:`);
+
+    if (fs.existsSync("./stepspacks")) {
+      const packs = fs
+        .readdirSync("./stepspacks")
+        .filter((f) => fs.statSync(`./stepspacks/${f}`).isDirectory());
+
+      if (packs.length > 0) {
+        packs.forEach((p) => console.error(`   - ${p}`));
+      } else {
+        console.error("(nessun pack disponibile)");
+      }
+    }
+
+    process.exit(1);
+  }
+
+  const settingsPath = `${stepsPackPath}/settings.json`;
+  if (!fs.existsSync(settingsPath)) {
+    console.error(
+      `❌ ERRORE: File settings.json non trovato in ${stepsPackPath}`
+    );
+    process.exit(1);
+  }
+
+  settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+
+  // Override steps_file path per puntare al pack
+  settings.execution.steps_file = `${stepsPackPath}/steps.json`;
+
+  // Output directory dedicato per il pack
+  outputDir = `${stepsPackPath}/generated`;
+
+  console.log(`📦 Usando StepsPack: ${stepsPack}`);
+  console.log(`📁 Output directory: ${outputDir}`);
+} else {
+  // Modalità standard
+  settings = !options.mock
+    ? JSON.parse(fs.readFileSync("aidriven-settings.json", "utf8"))
+    : JSON.parse(fs.readFileSync("aidriven-settings.mock.json", "utf8"));
+}
+
+const { execution, ai_agent } = settings;
 var stepArr = [];
 var isHeadless = execution.headless;
 
 /* -----------------------------------------------
-   CONFIGURAZIONE CLIENT OPENAI 
+   CONFIGURAZIONE CLIENT OPENAI
 -------------------------------------------------- */
 const client = options.mock
   ? new MockOpenAI({
@@ -74,12 +156,12 @@ const client = options.mock
     });
 
 /* -----------------------------------------------
-     Utility functions
+   UTILITY FUNCTIONS
 -------------------------------------------------- */
 const pauseOf = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 
 /* -----------------------------------------------
-     Generazione codice Playwright
+   GENERAZIONE CODICE PLAYWRIGHT (CON OUTPUT DIR)
 -------------------------------------------------- */
 async function generateAndGetPwCode(
   taskDescription,
@@ -122,15 +204,22 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
     .replace(/```[a-z]*|```/g, "")
     .trim();
 
-  const dir = "./generated/aidriven";
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  const filePath = `${dir}/step-${stepId}.js`;
-  fs.writeFileSync(filePath, code);
+  // Usa la directory di output corretta (pack o default)
+  if (!fs.existsSync(outputDir)) {
+    fs.mkdirSync(outputDir, { recursive: true });
+  }
+
+   let improvedCode = `await page.waitForLoadState('networkidle');
+  ${code}`;
+
+  const filePath = `${outputDir}/step-${stepId}.js`;
+  fs.writeFileSync(filePath, improvedCode);
 
   console.log(`✅ Step ${stepIndex} generato in: ${filePath}`);
-
+ 
+  //console.log("improved code", improvedCode);
   return {
-    code,
+    code: improvedCode,
     tokenIn: response.usage.prompt_tokens,
     tokenOut: response.usage.completion_tokens,
     cachedToken: response.usage.prompt_tokens_details.cached_tokens,
@@ -138,7 +227,7 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
 }
 
 /* -----------------------------------------------
-   Calcolo usage totale
+   CALCOLO USAGE TOTALE
 -------------------------------------------------- */
 function getTotalUsage(stepArr) {
   var totToken = 0;
@@ -166,7 +255,7 @@ function getTotalUsage(stepArr) {
 }
 
 /* -----------------------------------------------
-     Aggiorna file steps
+   AGGIORNA FILE STEPS (CON PATH CORRETTO)
 -------------------------------------------------- */
 function updateAiDrivenSteps() {
   const output = {
@@ -181,10 +270,10 @@ function updateAiDrivenSteps() {
 }
 
 /* -----------------------------------------------
-     Recupera codice dalla cache
+   RECUPERA CODICE DALLA CACHE (CON OUTPUT DIR)
 -------------------------------------------------- */
 function getCachedCode(step) {
-  var path = `./generated/aidriven/step-${step.id}.js`;
+  const path = `${outputDir}/step-${step.id}.js`;
   if (fs.existsSync(path)) {
     return fs.readFileSync(path, "utf8");
   } else {
@@ -193,12 +282,127 @@ function getCachedCode(step) {
 }
 
 /* -----------------------------------------------
-     MAIN SCRIPT
+   CALCOLA LA DIFFERENZA TRA DUE STRINGHE HTML
+   - Restituisce solo le righe presenti in `after` 
+     ma assenti in `before`
+   - Utile per inviare all'agent solo i nuovi elementi 
+     introdotti da uno step
+-------------------------------------------------- */
+function getHtmlDiff(before, after) {
+  const beforeLines = before.split("\n").map((l) => l.trim());
+  const afterLines = after.split("\n").map((l) => l.trim());
+  const diff = afterLines.filter((line) => !beforeLines.includes(line));
+  return diff.join("\n");
+}
+
+
+/**
+ * Rimuove contenuti non rilevanti dall'HTML prima di inviarlo all'AI
+ * - Commenti HTML
+ * - Script inline e esterni
+ * - Stili CSS inline
+ * - Attributi inutili (data-*, aria-* eccetto aria-label)
+ * - Contenuti nascosti (display: none, hidden)
+ */
+function cleanHtmlForAI(html) {
+  let cleaned = html;
+  console.log("before clean", html.length);
+
+  cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, '');
+  cleaned = cleaned.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
+  cleaned = cleaned.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
+  cleaned = cleaned.replace(/<path\b[^>]*\/?>/gi, '');
+  cleaned = cleaned.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
+  cleaned = cleaned.replace(/<img\b[^>]*\s+src=["'][^"']*["']/gi, match => {
+    return match.replace(/\s+src=["'][^"']*["']/, '');
+  });
+  cleaned = cleaned.replace(/\s+style="[^"]*"/gi, '');
+  cleaned = cleaned.replace(/\s+data-(?!testid)[a-z-]+=["'][^"']*["']/gi, '');
+  cleaned = cleaned.replace(/\s+aria-(?!label)[a-z-]+=["'][^"']*["']/gi, '');
+  cleaned = cleaned.replace(/\s+/g, ' ');
+  cleaned = cleaned.replace(/>\s+</g, '><');
+  console.log("after clean", cleaned.length);
+
+  return removeLongText(cleaned.trim());
+}
+
+function removeLongText(html, maxLength = 25) {
+  const dom = new JSDOM(html);
+  const doc = dom.window.document;
+
+  function cleanNode(node) {
+    node.childNodes.forEach(child => {
+      if (child.nodeType === 3) { // TEXT_NODE
+        if (child.textContent.trim().length > maxLength) {
+          child.textContent = '';
+        }
+      } else if (child.nodeType === 1) { // ELEMENT_NODE
+        cleanNode(child); // ricorsione sui figli
+      }
+    });
+  }
+
+  cleanNode(doc.body);
+  return doc.body.innerHTML;
+}
+
+
+
+/*async function extractRelevantHtml(page, prompt) {
+  const promptLower = prompt.toLowerCase();
+  
+  // Mappa keyword -> selettori CSS
+  const relevanceMap = {
+    'login': 'form, input[type="text"], input[type="password"], input[type="email"], button[type="submit"]',
+    'username': 'input[type="text"], input[name*="user"], input[id*="user"]',
+    'password': 'input[type="password"]',
+    'button': 'button, a.btn, input[type="submit"]',
+    'click': 'button, a, [role="button"], [onclick]',
+    'menu': 'nav, [role="navigation"], .menu, #menu',
+    'dropdown': 'select, [role="listbox"], .dropdown',
+    'form': 'form, input, textarea, select',
+    'table': 'table, [role="table"]',
+    'modal': '[role="dialog"], .modal, .popup',
+  };
+
+  // Trova selettori rilevanti
+  let selectors = [];
+  for (const [keyword, selector] of Object.entries(relevanceMap)) {
+    if (promptLower.includes(keyword)) {
+      selectors.push(selector);
+    }
+  }
+
+  // Fallback: se nessun keyword match, usa body completo (ma pulito)
+  if (selectors.length === 0) {
+    const fullHtml = await page.$eval('body', el => el.outerHTML);
+    return cleanHtmlForAI(fullHtml);
+  }
+
+  // Estrai solo elementi rilevanti
+  const relevantHtml = await page.evaluate((selectorsList) => {
+    const elements = [];
+    selectorsList.forEach(selector => {
+      document.querySelectorAll(selector).forEach(el => {
+        elements.push(el.outerHTML);
+      });
+    });
+    return elements.join('\n');
+  }, selectors);
+
+  return cleanHtmlForAI(relevantHtml);
+}*/
+
+/* -----------------------------------------------
+   MAIN SCRIPT
 -------------------------------------------------- */
 (async () => {
   const data = JSON.parse(fs.readFileSync(execution.steps_file, "utf8"));
   const steps = data.steps;
   const url = execution.entrypoint_url;
+
+  // Passa outputDir agli Step per la cache
+  Step.outputDir = outputDir;
 
   stepArr = steps.map(
     (s, i) =>
@@ -206,6 +410,7 @@ function getCachedCode(step) {
         index: i + 1,
         subPrompt: s.sub_prompt,
         timeout: s.timeout || 10000,
+        stepPath: outputDir,
       })
   );
 
@@ -216,9 +421,7 @@ function getCachedCode(step) {
       console.error("\n❌ ERRORE: Cache mancante per i seguenti step:");
       missingCache.forEach((step) => {
         console.error(`   - Step ${step.index}: "${step.subPrompt}"`);
-        console.error(
-          `     File atteso: ./generated/aidriven/step-${step.id}.js`
-        );
+        console.error(`     File atteso: ${outputDir}/step-${step.id}.js`);
       });
 
       console.error(
@@ -230,8 +433,14 @@ function getCachedCode(step) {
     console.log("✅ Cache completa validata\n");
   }
 
-  console.log(`\nEntry Point URL: ${url}`);
-  console.log(`Numero step da eseguire: ${stepArr.length}`);
+  console.log(`\n🚀 Avvio esecuzione`);
+  if (stepsPack) {
+    console.log(`📦 StepsPack: ${stepsPack}`);
+  }
+  console.log(`🌐 Entry Point URL: ${url}`);
+  console.log(`📋 Numero step da eseguire: ${stepArr.length}`);
+  console.log(`⚡ Strength: ${strength}`);
+  console.log(`💾 Cache: ${noCache ? "disabilitata" : "abilitata"}`);
 
   const browser = await chromium.launch({ headless: isHeadless });
   const page = await browser.newPage();
@@ -244,25 +453,23 @@ function getCachedCode(step) {
   for (const step of stepArr) {
     while (step.attemps > 0 && !step.success) {
       step.logStart();
-
-      const html = await page.content();
-      const body = await page.$eval('body', el => el.outerHTML);
-
+      const body = cleanHtmlForAI(await page.$eval("body", (el) => el.outerHTML));
+      fs.writeFileSync("./stepspacks/change-image-livrea/generated/" + step.index + ".html", body);
       try {
         var code = "";
         if (step.cache && !noCache) {
           try {
             code = getCachedCode(step);
             console.log(`📦 Usando codice dalla cache`);
+            step.cache = false; // Marca cache come usata
           } catch (cacheError) {
-            // Gestione specifica per cache mancante in modalità onlycache
+            //retrieve cache fallita
             if (strength === "onlycache") {
+              //check se onlycache se si throw error, errore critico stop esecuz
               console.error(
                 `❌ ERRORE CRITICO: Cache mancante per step ${step.index} in modalità onlycache`
               );
-              console.error(
-                `   File atteso: ./generated/aidriven/step-${step.id}.js`
-              );
+              console.error(`   File atteso: ${outputDir}/step-${step.id}.js`);
 
               results.push({
                 index: step.index,
@@ -272,23 +479,38 @@ function getCachedCode(step) {
                 critical: true,
               });
 
-              // Esci dal loop e ferma l'esecuzione
               step.attemps = 0;
               step.success = false;
               step.error = cacheError;
 
-              // Opzionale: ferma completamente l'esecuzione
               throw new Error(
                 `Esecuzione interrotta: cache mancante per step "${step.subPrompt}" in modalità onlycache`
               );
             }
 
-            // Se non siamo in onlycache, rilanciamo l'errore per gestione normale
-            throw cacheError;
+            // FALLBACK: Cache non trovata, genera codice con API
+            console.log(`⚠️  Cache non trovata, genero nuovo codice...`);
+            step.cache = false;
+
+            const errorMsg =
+              step.attemps === 1 && strength == "high" && step.error
+                ? step.error.message
+                : null;
+            const responseObj = await generateAndGetPwCode(
+              step.subPrompt,
+              page.url(),
+              body,
+              step.index,
+              step.id,
+              errorMsg
+            );
+
+            code = responseObj.code;
+            step.inputToken = responseObj.tokenIn;
+            step.outputToken = responseObj.tokenOut;
+            step.cachedToken = responseObj.cachedToken;
           }
-          step.cache = false;
         } else {
-          // Generazione normale del codice
           const errorMsg =
             step.attemps === 1 && strength == "high" && step.error
               ? step.error.message
@@ -328,7 +550,6 @@ function getCachedCode(step) {
         step.logError(err);
         step.error = err;
 
-        // Se siamo in onlycache e l'errore è critico, interrompi tutto
         if (
           strength === "onlycache" &&
           err.message.includes("Cache file not found")
@@ -355,15 +576,18 @@ function getCachedCode(step) {
 
   await browser.close();
 
-  const resultFile = "./generated/aidriven/run-log.json";
+  const resultFile = `${outputDir}/run-log.json`;
   const output = {
+    stepspack: stepsPack || null,
     results,
     usage: usageObj,
     timestamp: new Date().toISOString(),
     mock_mode: options.mock || false,
+    strength: strength,
+    cache_enabled: !noCache,
   };
 
   fs.writeFileSync(resultFile, JSON.stringify(output, null, 2));
   updateAiDrivenSteps();
-  console.log(`Log salvato in: ${resultFile}`);
+  console.log(`📊 Log salvato in: ${resultFile}`);
 })();
