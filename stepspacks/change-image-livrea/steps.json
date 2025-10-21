@@ -1,0 +1,24 @@
+{
+  "steps": [
+    {
+      "id": "73443201",
+      "sub_prompt": "Attendi il caricamento completato, Clicca su login",
+      "timeout": "8000"
+    },
+    {
+      "id": "66e265a6",
+      "sub_prompt": "Inserisci sul campo username pietro.contadini e nel campo password AaN!7aa e clicca Login",
+      "timeout": "13000"
+    },
+    {
+      "id": "96d82297",
+      "sub_prompt": "Accetta il banner, clicca sui 3 puntini a destra nel div del profilo poi clicca su a con id #btn_modifica_foto",
+      "timeout": "10000"
+    },
+    {
+      "id": "7e6f94be",
+      "sub_prompt": "clicca su choose file e seleziona /home/pietroc/projects/pw-ai-smartpeg/stepspacks/change-image-livrea/media/imagep.png aspetta 3 secondi poi clicca su uno dei bottoni che dentro ha l'icon di Salvataggio ma che è l'unico abilitato",
+      "timeout": "15000"
+    }
+  ]
+}
