@@ -1,0 +1,19 @@
+{
+  "steps": [
+    {
+      "id": "c259ec6c",
+      "sub_prompt": "Attendi il caricamento completato, Clicca sul bottone login ",
+      "timeout": "10000"
+    },
+    {
+      "id": "c83efcf4",
+      "sub_prompt": "Inserisci sul campo username pietro.contadini e nel campo password 1234QWe! e clicca Login",
+      "timeout": "10000"
+    },
+    {
+      "id": "d60fe7f9",
+      "sub_prompt": "Se è presente 'Non sono presenti funzioni extra' fallisci il test altrimenti clicca su QUESTIONARIO ONLINE",
+      "timeout": "10000"
+    }
+  ]
+}
