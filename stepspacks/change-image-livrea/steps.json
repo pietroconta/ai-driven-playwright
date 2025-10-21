@@ -11,9 +11,14 @@
       "timeout": "13000"
     },
     {
-      "id": "acb1ea27",
-      "sub_prompt": "Clicca sui 3 puntini a destra nel div del profilo poi clicca su a con id #btn_modifica_foto",
-      "timeout": "8000"
+      "id": "96d82297",
+      "sub_prompt": "Accetta il banner, clicca sui 3 puntini a destra nel div del profilo poi clicca su a con id #btn_modifica_foto",
+      "timeout": "10000"
+    },
+    {
+      "id": "7e6f94be",
+      "sub_prompt": "clicca su choose file e seleziona /home/pietroc/projects/pw-ai-smartpeg/stepspacks/change-image-livrea/media/imagep.png aspetta 3 secondi poi clicca su uno dei bottoni che dentro ha l'icon di Salvataggio ma che è l'unico abilitato",
+      "timeout": "15000"
     }
   ]
 }

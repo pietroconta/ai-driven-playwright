@@ -1,7 +1,4 @@
-//TODO: risolvere problemi di sincronizzazione (se c'è una latenza del server il timeout dello step 
-// è statico quindi, se la pagina non è ancora caricata, lo step verrà eseguito causando errore oppure no?)
 //TODO: migliorare lancio errori
-//TODO: risolvere problema: impossibilità dell'agent di trovare un selettore che non esiste
 // ancora (non esiste prima di un cick o un evento particolare), soluzioni:
 // prendere la differenza html prima e dopo di uno step fallito causa: selettore non trovato
 // mandarlo all'agent con l'errore del selettore non trovato, la differenza dei 2 html e con
