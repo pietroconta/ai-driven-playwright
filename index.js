@@ -1,13 +1,8 @@
-//TODO: migliorare lancio errori
-// ancora (non esiste prima di un cick o un evento particolare), soluzioni:
-// prendere la differenza html prima e dopo di uno step fallito causa: selettore non trovato
-// mandarlo all'agent con l'errore del selettore non trovato, la differenza dei 2 html e con
-// lo scopo di rigenerare il codice con la differenza
-// pro: risoluzione errore
-// contro: aumento notevole dei costi di testing nei workflow piu complessi
+//TODO: se l'errore è un errore lanciato dalla funzione fn, quindi un errore del prodotto anzichè del test driver ai allora il fallback non dovrà essere eseguito e nel json dovrà essere inserito solo il msg di erorre non tutta l'eccezione
 
+//TODO verificare funizionamento controllo errore
 // ============================================
-// FILE: index.js (MODIFICHE)
+// FILE: index.js
 // ============================================
 import dotenv from "dotenv";
 import "dotenv/config";
@@ -28,6 +23,21 @@ program
     "Livello di forza AI (onlycache, medium, high)",
     "medium"
   )
+  /*.option(
+    "--cxtclean <level>",
+    "Livello di pulizia del dom che verrà passato all'agent (low, medium, high)",
+    "medium"
+  )*/
+  .option(
+    "--htmlclean-remove <items>",
+    "Elenco elementi da rimuovere separati da virgola (es: script,style,svg,img,comments,attributes,longtext)",
+    "comments, script, style, svg, img, attributes, longtext"
+  )
+  .option(
+    "--htmlclean-keep <items>",
+    "Elenco elementi da tenere separati da virgola (es:script, comments, img, style)",
+    ""
+  )
   .option("--nocache", "Disabilita completamente l'uso della cache")
   .option(
     "--stepspack <name>",
@@ -41,6 +51,9 @@ const strength = options.strength;
 const noCache = options.nocache;
 const stepsPack = options.stepspack;
 
+const removeItems = options.htmlcleanRemove.split(",").map((i) => i.trim());
+const keepItems = options.htmlcleanKeep.split(",").map((i) => i.trim());
+console.log(removeItems);
 /* -----------------------------------------------
    VALIDAZIONE OPZIONI
 -------------------------------------------------- */
@@ -206,14 +219,14 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
     fs.mkdirSync(outputDir, { recursive: true });
   }
 
-   let improvedCode = `await page.waitForLoadState('networkidle');
+  let improvedCode = `await page.waitForLoadState('networkidle');
   ${code}`;
 
   const filePath = `${outputDir}/step-${stepId}.js`;
   fs.writeFileSync(filePath, improvedCode);
 
   console.log(`✅ Step ${stepIndex} generato in: ${filePath}`);
- 
+
   //console.log("improved code", improvedCode);
   return {
     code: improvedCode,
@@ -292,7 +305,6 @@ function getHtmlDiff(before, after) {
   return diff.join("\n");
 }
 
-
 /**
  * Rimuove contenuti non rilevanti dall'HTML prima di inviarlo all'AI
  * - Commenti HTML
@@ -301,39 +313,70 @@ function getHtmlDiff(before, after) {
  * - Attributi inutili (data-*, aria-* eccetto aria-label)
  * - Contenuti nascosti (display: none, hidden)
  */
-function cleanHtmlForAI(html) {
+function cleanHtmlForAI(html, removeItems = [], keepItems = []) {
   let cleaned = html;
+  const shouldRemove = (item) =>
+    removeItems.includes("all") ||
+    (removeItems.includes(item) && !keepItems.includes(item));
   console.log("before clean", html.length);
+  if (shouldRemove("comments")) {
+    cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, "");
+  }
+  if (shouldRemove("script")) {
+    cleaned = cleaned.replace(
+      /<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi,
+      ""
+    );
+  }
+  if (shouldRemove("style")) {
+    cleaned = cleaned.replace(
+      /<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi,
+      ""
+    );
+  }
+  if (shouldRemove("svg")) {
+    cleaned = cleaned.replace(/<path\b[^>]*\/?>/gi, "");
+    cleaned = cleaned.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, "");
+  }
 
-  cleaned = cleaned.replace(/<!--[\s\S]*?-->/g, '');
-  cleaned = cleaned.replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '');
-  cleaned = cleaned.replace(/<style\b[^<]*(?:(?!<\/style>)<[^<]*)*<\/style>/gi, '');
-  cleaned = cleaned.replace(/<path\b[^>]*\/?>/gi, '');
-  cleaned = cleaned.replace(/<svg\b[^>]*>[\s\S]*?<\/svg>/gi, '');
-  cleaned = cleaned.replace(/<img\b[^>]*\s+src=["'][^"']*["']/gi, match => {
-    return match.replace(/\s+src=["'][^"']*["']/, '');
-  });
-  cleaned = cleaned.replace(/\s+style="[^"]*"/gi, '');
-  cleaned = cleaned.replace(/\s+data-(?!testid)[a-z-]+=["'][^"']*["']/gi, '');
-  cleaned = cleaned.replace(/\s+aria-(?!label)[a-z-]+=["'][^"']*["']/gi, '');
-  cleaned = cleaned.replace(/\s+/g, ' ');
-  cleaned = cleaned.replace(/>\s+</g, '><');
+  if (shouldRemove("img")) {
+    cleaned = cleaned.replace(/<img\b[^>]*\s+src=["'][^"']*["']/gi, (match) => {
+      return match.replace(/\s+src=["'][^"']*["']/, "");
+    });
+  }
+  if (shouldRemove("inlinestyle")) {
+    cleaned = cleaned.replace(/\s+style="[^"]*"/gi, "");
+  }
+
+  if (shouldRemove("attributes")) {
+    cleaned = cleaned.replace(/\s+data-(?!testid)[a-z-]+=["'][^"']*["']/gi, "");
+    cleaned = cleaned.replace(/\s+aria-(?!label)[a-z-]+=["'][^"']*["']/gi, "");
+  }
+
+  if (shouldRemove("longtext")) {
+    cleaned = removeLongText(cleaned, 25);
+  }
+
+  cleaned = cleaned.replace(/\s+/g, " ");
+  cleaned = cleaned.replace(/>\s+</g, "><");
   console.log("after clean", cleaned.length);
 
-  return removeLongText(cleaned.trim());
+  return cleaned.trim();
 }
 
-function removeLongText(html, maxLength = 25) {
+function removeLongText(html, maxLength = 30) {
   const dom = new JSDOM(html);
   const doc = dom.window.document;
 
   function cleanNode(node) {
-    node.childNodes.forEach(child => {
-      if (child.nodeType === 3) { // TEXT_NODE
+    node.childNodes.forEach((child) => {
+      if (child.nodeType === 3) {
+        // TEXT_NODE
         if (child.textContent.trim().length > maxLength) {
-          child.textContent = '';
+          child.textContent = "";
         }
-      } else if (child.nodeType === 1) { // ELEMENT_NODE
+      } else if (child.nodeType === 1) {
+        // ELEMENT_NODE
         cleanNode(child); // ricorsione sui figli
       }
     });
@@ -342,8 +385,6 @@ function removeLongText(html, maxLength = 25) {
   cleanNode(doc.body);
   return doc.body.innerHTML;
 }
-
-
 
 /*async function extractRelevantHtml(page, prompt) {
   const promptLower = prompt.toLowerCase();
@@ -430,14 +471,14 @@ function removeLongText(html, maxLength = 25) {
     console.log("✅ Cache completa validata\n");
   }
 
-  console.log(`\n🚀 Avvio esecuzione`);
+  console.log(`\n Avvio esecuzione`);
   if (stepsPack) {
     console.log(`📦 StepsPack: ${stepsPack}`);
   }
   console.log(`🌐 Entry Point URL: ${url}`);
-  console.log(`📋 Numero step da eseguire: ${stepArr.length}`);
-  console.log(`⚡ Strength: ${strength}`);
-  console.log(`💾 Cache: ${noCache ? "disabilitata" : "abilitata"}`);
+  console.log(`Step totali: ${stepArr.length}`);
+  console.log(`Strength: ${strength}`);
+  console.log(`Cache: ${noCache ? "disabilitata" : "abilitata"}`);
 
   const browser = await chromium.launch({ headless: isHeadless });
   const page = await browser.newPage();
@@ -450,8 +491,30 @@ function removeLongText(html, maxLength = 25) {
   for (const step of stepArr) {
     while (step.attemps > 0 && !step.success) {
       step.logStart();
-      const body = cleanHtmlForAI(await page.$eval("body", (el) => el.outerHTML));
-      fs.writeFileSync("./stepspacks/change-image-livrea/generated/" + step.index + ".html", body);
+      await page.waitForLoadState("networkidle");
+      const debugPRECHTMLPath =
+        "./stepspacks/" + stepsPack + "/generated/debug/pre-clean";
+      if (!fs.existsSync(debugPRECHTMLPath)) {
+        fs.mkdirSync(debugPRECHTMLPath, { recursive: true });
+      }
+      fs.writeFileSync(
+        debugPRECHTMLPath + "/" + step.index + ".html",
+        await page.content()
+      );
+
+      const body = cleanHtmlForAI(
+        await page.$eval("body", (el) => el.outerHTML),
+        removeItems,
+        keepItems
+      );
+
+      const debugPCHTMLPath =
+        "./stepspacks/" + stepsPack + "/generated/debug/post-clean";
+      if (!fs.existsSync(debugPCHTMLPath)) {
+        fs.mkdirSync(debugPCHTMLPath, { recursive: true });
+      }
+      fs.writeFileSync(debugPCHTMLPath + "/" + step.index + ".html", body);
+
       try {
         var code = "";
         if (step.cache && !noCache) {
@@ -570,13 +633,13 @@ function removeLongText(html, maxLength = 25) {
   var usageObj = getTotalUsage(stepArr);
   console.log("\n🏁 Tutte le task completate.");
   console.log(JSON.stringify(usageObj, null, 2));
-
   await browser.close();
 
-  const resultFile = `${outputDir}/run-log.json`;
-  const output = {
-    stepspack: stepsPack || null,
-    results,
+  const resultFile = `${outputDir}/run-logs.json`;
+
+  // Crea l'oggetto per questa esecuzione
+  const currentRun = {
+    results: results,
     usage: usageObj,
     timestamp: new Date().toISOString(),
     mock_mode: options.mock || false,
@@ -584,7 +647,54 @@ function removeLongText(html, maxLength = 25) {
     cache_enabled: !noCache,
   };
 
-  fs.writeFileSync(resultFile, JSON.stringify(output, null, 2));
+  // Leggi il file esistente se presente
+  let existingOutput = {
+    stepspack: stepsPack || null,
+    runs: [],
+  };
+
+  if (fs.existsSync(resultFile)) {
+    try {
+      const fileContent = fs.readFileSync(resultFile, "utf-8");
+
+      // Verifica che il file non sia vuoto
+      if (fileContent.trim()) {
+        existingOutput = JSON.parse(fileContent);
+
+        // Assicurati che esista l'array runs (per retrocompatibilità)
+        if (!existingOutput.runs) {
+          existingOutput.runs = [];
+        }
+
+        // Mantieni lo stepspack se esiste
+        if (!existingOutput.stepspack) {
+          existingOutput.stepspack = stepsPack || null;
+        }
+      } else {
+        console.warn("⚠️ File JSON vuoto, inizializzo nuovo file");
+      }
+    } catch (error) {
+      console.error("❌ Errore nel parsing del JSON esistente:", error.message);
+      console.warn("⚠️ Creo un backup e inizializzo nuovo file");
+
+      // Crea un backup del file corrotto
+      const backupFile = `${outputDir}/run-logs.backup.${Date.now()}.json`;
+      fs.copyFileSync(resultFile, backupFile);
+      console.log(`📦 Backup creato: ${backupFile}`);
+
+      // Reinizializza
+      existingOutput = {
+        stepspack: stepsPack || null,
+        runs: [],
+      };
+    }
+  }
+
+  // Aggiungi la nuova esecuzione
+  existingOutput.runs.push(currentRun);
+
+  // Scrivi il file aggiornato
+  fs.writeFileSync(resultFile, JSON.stringify(existingOutput, null, 2));
   updateAiDrivenSteps();
-  console.log(`📊 Log salvato in: ${resultFile}`);
+  console.log(`Log salvato in: ${resultFile}`);
 })();

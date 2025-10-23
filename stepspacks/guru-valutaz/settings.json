@@ -1,0 +1,14 @@
+{
+    "execution": {
+        "entrypoint_url": "https://clienteprova2.guru-hrm.it/pages/login.aspx",
+        "headless": false,
+        "steps_file": "aidriven-steps.json"
+    },
+    "ai_agent":{
+        "type": "gpt-4o",
+        "endpoint": "https://afp-ai-for-test-resource.openai.azure.com/openai/deployments/gpt-4o",
+        "cost_input_token": "0.000005",
+        "cost_output_token": "0.00002",
+        "cost_cached_token": "0.0000025"
+    }
+}
