@@ -800,5 +800,3 @@ For issues, feature requests, or questions:
 ---
 
 **Happy Automating! 🚀**
-
-*Built with ❤️ for developers who believe tests should write themselves.*
