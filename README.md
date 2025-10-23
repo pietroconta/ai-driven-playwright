@@ -786,6 +786,7 @@ This project is licensed under the ISC License - see [LICENSE](LICENSE) file for
 - [**Azure OpenAI**](https://azure.microsoft.com/products/ai-services/openai-service) - Enterprise AI service
 - [**Commander.js**](https://github.com/tj/commander.js) - CLI argument parsing
 - [**JSDOM**](https://github.com/jsdom/jsdom) - HTML parsing and cleaning
+<<<<<<< HEAD
 
 ---
 
@@ -800,3 +801,4 @@ For issues, feature requests, or questions:
 ---
 
 **Happy Automating! 🚀**
+=======
