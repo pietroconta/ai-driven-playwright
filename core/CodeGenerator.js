@@ -58,7 +58,8 @@ Genera codice che esegue ESATTAMENTE le seguenti azioni sulla pagina corrente:
 La pagina corrente è: ${url}
 
 Devi usare l'oggetto "page" già aperto (non aprire un nuovo browser o una nuova pagina).
-Puoi anche usare "expect" se serve per validare elementi visibili o testi.
+Puoi anche usare "expect" se serve per validare elementi visibili o testi, se lanci errori
+assicurati di inserire all'inizio del messaggio del throw: "Test failed:" e poi il motivo
 Non aggiungere testo extra, solo codice JavaScript eseguibile.
 `;
 
