@@ -36,7 +36,7 @@ export class RetryManager {
 
     while (attemptsRemaining > 0 && !step.success) {
       const attemptNumber = this.maxAttempts - attemptsRemaining + 1;
-      
+
       logger.logAttemptStart(step, attemptNumber, this.maxAttempts);
 
       try {
@@ -63,12 +63,25 @@ export class RetryManager {
       } catch (error) {
         lastError = error;
         step.error = error;
-        
+
         logger.logAttemptError(step, attemptNumber, error);
+        console.log("error: ", typeof (error + ""));
+        if (`${error}`.includes("Test failed:")) {
+          attemptsRemaining = 0;
+          console.log("Test Fallito, fine esecuzione");
+
+          return {
+            success: false,
+            attempts: attemptNumber,
+            error: error,
+          };
+        }
 
         // Se è onlycache e manca la cache, fallimento critico
         if (this.strategy === "onlycache" && this._isCacheError(error)) {
-          throw new Error(`Cache mancante per step "${step.subPrompt}" in modalità onlycache`);
+          throw new Error(
+            `Cache mancante per step "${step.subPrompt}" in modalità onlycache`
+          );
         }
       } finally {
         attemptsRemaining--;
@@ -86,10 +99,18 @@ export class RetryManager {
   /**
    * Ottiene il codice da eseguire (cache o generazione)
    */
-  async _getCode(step, executor, codeGenerator, page, lastError, attemptNumber) {
+  async _getCode(
+    step,
+    executor,
+    codeGenerator,
+    page,
+    lastError,
+    attemptNumber
+  ) {
     // Tentativo 1: usa cache se disponibile e abilitata
     if (attemptNumber === 1 && this.useCacheFirst) {
       try {
+        console.log("Sto usando la cache");
         const cachedCode = executor.loadCachedCode(step.id);
         step.usedCache = true;
         return cachedCode;
