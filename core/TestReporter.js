@@ -113,10 +113,10 @@ export class TestReporter {
     console.log(`✅ Successi: ${successCount}`);
     console.log(`❌ Fallimenti: ${failureCount}`);
     console.log("\n📊 Token Usage:");
-    console.log(`   Input: ${usage.input_tokens.toLocaleString()}`);
-    console.log(`   Output: ${usage.output_tokens.toLocaleString()}`);
-    console.log(`   Cached: ${usage.cached_tokens.toLocaleString()}`);
-    console.log(`   Totale: ${usage.total_tokens.toLocaleString()}`);
+    console.log(`   Input: ${usage.input_tokens}`);
+    console.log(`   Output: ${usage.output_tokens}`);
+    console.log(`   Cached: ${usage.cached_tokens}`);
+    console.log(`   Totale: ${usage.total_tokens}`);
     console.log(`   Costo stimato: $${usage.calculated_cost.toFixed(4)}`);
 
     return { usage, duration, successCount, failureCount };
