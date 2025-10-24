@@ -2,7 +2,7 @@
 // FILE: core/TestRunner.js
 // ============================================
 import { chromium } from "playwright";
-
+import fs from "fs";
 /**
  * Orchestratore principale che coordina l'esecuzione dei test
  */
@@ -13,6 +13,7 @@ export class TestRunner {
     this.codeGenerator = config.codeGenerator;
     this.retryManager = config.retryManager;
     this.reporter = config.reporter;
+    this.stepsJSONPath = "./stepspacks/" + this.config.stepspack + "/steps.json";
   }
 
   /**
@@ -52,6 +53,16 @@ export class TestRunner {
           break;
         }
       }
+      var jsonSteps = [];
+      for(const step of steps){
+        jsonSteps.push(step.toJSON());
+      }
+
+      const data = {
+        steps: jsonSteps
+      }
+      fs.writeFileSync(this.stepsJSONPath, JSON.stringify(data, null, 2));
+
 
       // Genera report finale
       const summary = this.reporter.generateFinalReport(steps, {

@@ -19,8 +19,12 @@ export class Step {
     this.totalSteps = config.totalSteps || 1;
     this.stepsPack = config.stepsPack || null;
 
+    this._stepExpectations = config.stepExpectations;
+
+    this.expectations = config.expectations;
+
     // Genera ID univoco basato sul prompt
-    this.id = this._generateId(config.subPrompt);
+    this.id = this._generateId();
 
     // Stato esecuzione
     this.success = false;
@@ -32,13 +36,20 @@ export class Step {
     this.outputToken = 0;
     this.cachedToken = 0;
     this.executionTime = 0;
+
+    //console.log(this.expectations);
   }
 
   /**
    * Genera ID deterministico per lo step
    */
-  _generateId(prompt) {
-    return crypto.createHash("md5").update(prompt).digest("hex").substring(0, 8);
+  _generateId() {
+    const data = {
+      sub_prompt: this.subPrompt,
+      timeout: this.timeout,
+      expectations: this.expectations
+    }
+    return crypto.createHash("md5").update(JSON.stringify(data)).digest("hex").substring(0, 8);
   }
 
   /**
@@ -77,10 +88,19 @@ export class Step {
     });
   }
 
+  toJSON(){
+    return {
+      id: this.id,
+      sub_prompt: this.subPrompt,
+      timeout: this.timeout,
+      expectations: this._stepExpectations
+    }
+  }
+
   /**
    * Serializza lo step per salvataggio
    */
-  toJSON() {
+  toReportJSON() {
     return {
       id: this.id,
       index: this.index,

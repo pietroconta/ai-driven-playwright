@@ -58,6 +58,8 @@ export class ConfigManager {
     this.settings.execution.steps_file = `${this.stepsPackPath}/steps.json`;
     this.outputDir = `${this.stepsPackPath}/generated`;
 
+    this.globalExpect = this.settings.execution.global_expect;
+
     console.log(`📦 StepsPack: ${packName}`);
     console.log(`📁 Output: ${this.outputDir}`);
 

@@ -110,12 +110,14 @@ export class RetryManager {
     // Tentativo 1: usa cache se disponibile e abilitata
     if (attemptNumber === 1 && this.useCacheFirst) {
       try {
-        console.log("Sto usando la cache");
+        console.log("Cerco la cache");
         const cachedCode = executor.loadCachedCode(step.id);
+        console.log("Uso la cache");
         step.usedCache = true;
         return cachedCode;
       } catch (cacheError) {
         // Cache non trovata, fallback a generazione
+        console.log("Cache non trovata");
         if (this.strategy === "onlycache") {
           throw cacheError; // In onlycache mode, cache mancante è critico
         }

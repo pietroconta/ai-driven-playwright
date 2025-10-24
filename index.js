@@ -1,3 +1,4 @@
+//TODO gestire l'esecuzione con più stepspack (Valutazione: autovalutaz - valutaz - colloquio - commenti)
 // ============================================
 // FILE: index.js (VERSIONE FINALE)
 // ============================================
@@ -33,11 +34,7 @@ program
     "Comma-separated elements to remove from HTML",
     "comments,script,style,svg,img,attributes,longtext"
   )
-  .option(
-    "--htmlclean-keep <items>",
-    "Comma-separated elements to keep",
-    ""
-  )
+  .option("--htmlclean-keep <items>", "Comma-separated elements to keep", "")
   .option("--nocache", "Disable cache usage")
   .option("--stepspack <name>", "Use steps pack from ./stepspacks/<name>")
   .option("--html-report", "Generate HTML report")
@@ -59,7 +56,8 @@ try {
   // Load configuration
   const settings = configManager.load();
   const { execution, ai_agent } = settings;
-
+  const gloabExpectPrompt = execution.global_expect;
+  //console.log(gloabExpectPrompt);
   /* -----------------------------------------------
      STEP CONFIGURATION
   -------------------------------------------------- */
@@ -94,12 +92,12 @@ try {
   -------------------------------------------------- */
   const removeItems = options.htmlcleanRemove
     .split(",")
-    .map(i => i.trim())
+    .map((i) => i.trim())
     .filter(Boolean);
 
   const keepItems = options.htmlcleanKeep
     .split(",")
-    .map(i => i.trim())
+    .map((i) => i.trim())
     .filter(Boolean);
 
   /* -----------------------------------------------
@@ -123,9 +121,10 @@ try {
     outputDir: configManager.getOutputDir(),
     stepsPack: options.stepspack || null,
   });
-
+  var stepspack = options.stepspack;
   const runner = new TestRunner({
     executor,
+    stepspack,
     codeGenerator,
     retryManager,
     reporter,
@@ -146,16 +145,31 @@ try {
      LOAD AND VALIDATE STEPS
   -------------------------------------------------- */
   const stepsData = configManager.loadSteps();
-  const steps = stepsData.map(
-    (s, i) =>
-      new Step({
-        index: i + 1,
-        subPrompt: s.sub_prompt,
-        timeout: s.timeout || 10000,
-        totalSteps: stepsData.length,
-        stepsPack: options.stepspack,
-      })
-  );
+  const steps = stepsData.map((s, i) => {
+    let expectations = [];
+
+    try {
+      if (Array.isArray(s.expectations)) {
+        expectations = s.expectations;
+      } else if (typeof s.expectations === "string") {
+        expectations = JSON.parse(s.expectations);
+      }
+    } catch (err) {
+      console.warn("⚠️ expectations parse error:", err);
+    }
+    const stepExpectations = [...expectations];
+    if (gloabExpectPrompt && !expectations.includes(gloabExpectPrompt)) expectations.push(gloabExpectPrompt);
+
+    return new Step({
+      index: i + 1,
+      subPrompt: s.sub_prompt,
+      timeout: s.timeout || 10000,
+      totalSteps: stepsData.length,
+      stepsPack: options.stepspack,
+      expectations: expectations,
+      stepExpectations: stepExpectations
+    });
+  });
 
   /* -----------------------------------------------
      CACHE VALIDATION (onlycache mode)

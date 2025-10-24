@@ -19,7 +19,7 @@ export class CodeGenerator {
   async generate(step, context) {
     const { taskDescription, url, html, errorMessage } = context;
 
-    const prompt = this._buildPrompt(taskDescription, url, errorMessage);
+    const prompt = this._buildPrompt(taskDescription, url, errorMessage, step.expectations);
     
     const response = await this.client.chat.completions.create({
       model: this.model,
@@ -49,19 +49,27 @@ export class CodeGenerator {
   /**
    * Costruisce il prompt per l'AI
    */
-  _buildPrompt(taskDescription, url, errorMessage = null) {
+  _buildPrompt(taskDescription, url, errorMessage = null, expectations = null) {
+    //console.log(expectations);
     let prompt = `
 Sei un assistente che genera SOLO codice Playwright (senza test(), describe() o import).
 Genera codice che esegue ESATTAMENTE le seguenti azioni sulla pagina corrente:
 "${taskDescription}"
 
-La pagina corrente è: ${url}
+La pagina corrente è: ${url}`;
 
-Devi usare l'oggetto "page" già aperto (non aprire un nuovo browser o una nuova pagina).
+if(expectations.length > 0){
+  prompt += `\nDevono verificarsi queste expectations (devi essere case insensitive) altrimenti se non sono veriicate devi
+  lanciare un eccezione con il nome dell'expectations: ${expectations}`
+}
+
+prompt +=  `Devi usare l'oggetto "page" già aperto (non aprire un nuovo browser o una nuova pagina).
 Puoi anche usare "expect" se serve per validare elementi visibili o testi, se lanci errori
 assicurati di inserire all'inizio del messaggio del throw: "Test failed:" e poi il motivo
 Non aggiungere testo extra, solo codice JavaScript eseguibile.
 `;
+
+
 
     if (errorMessage) {
       prompt += `\n\n⚠️ ATTENZIONE: Il tentativo precedente ha fallito con questo errore:
@@ -70,9 +78,9 @@ Non aggiungere testo extra, solo codice JavaScript eseguibile.
 Correggi il codice tenendo conto di questo problema. Analizza l'errore e adatta la strategia:
 - Se è un timeout, usa selettori più specifici o attendi caricamenti
 - Se è un selettore non trovato, verifica l'HTML fornito
-- Se è un click fallito, prova alternative (force, scroll into view)
-`;
+`//- Se è un click fallito, prova alternative (force, scroll into view);
     }
+    console.log(prompt);
 
     return prompt;
   }

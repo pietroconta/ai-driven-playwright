@@ -1,19 +1,46 @@
 {
   "steps": [
     {
-      "id": "c259ec6c",
+      "id": "e4cc8301",
       "sub_prompt": "Attendi il caricamento completato, Clicca sul bottone login ",
-      "timeout": "10000"
+      "timeout": "10000",
+      "expectations": [
+        "Compare un banner con scritto Application Error"
+      ]
     },
     {
-      "id": "c83efcf4",
-      "sub_prompt": "Inserisci sul campo username pietro.contadini e nel campo password 1234QWe! e clicca Login",
-      "timeout": "10000"
+      "id": "7ca76d94",
+      "sub_prompt": "Inserisci sul campo username giovanni.ferro e nel campo password 1234QWe! e clicca Login",
+      "timeout": "10000",
+      "expectations": [
+        "Compare un banner con scritto Application Error"
+      ]
     },
     {
-      "id": "d60fe7f9",
-      "sub_prompt": "Se è presente 'Non sono presenti funzioni extra' fallisci il test altrimenti clicca su QUESTIONARIO ONLINE",
-      "timeout": "10000"
+      "id": "c88b266b",
+      "sub_prompt": "Vai su Valutazione > Sistemi di valutazione",
+      "timeout": "10000",
+      "expectations": []
+    },
+    {
+      "id": "28a930c1",
+      "sub_prompt": "Vai su apri dettaglio",
+      "timeout": "10000",
+      "expectations": []
+    },
+    {
+      "id": "e4acae8b",
+      "sub_prompt": "Clicca sul selettore che contiene SEZIONE TEST 2025 - SEZIONE 2",
+      "timeout": "10000",
+      "expectations": []
+    },
+    {
+      "id": "008048e0",
+      "sub_prompt": "Trova tutti gli id delle selectbox della pagina e per ognuna devi selezionare 7",
+      "timeout": "10000",
+      "expectations": [
+        "non è presente salva selezione"
+      ]
     }
   ]
 }

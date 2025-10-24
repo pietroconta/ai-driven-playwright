@@ -1,19 +1,24 @@
 {
   "steps": [
     {
-      "id": "73443201",
-      "sub_prompt": "Attendi il caricamento completato, Clicca su login",
-      "timeout": "8000"
+      "id": "052d42cd",
+      "sub_prompt": "Attendi il caricamento completato, Clicca su Log in",
+      "timeout": "8000",
+      "expectations": []
     },
     {
-      "id": "66e265a6",
+      "id": "ed1bd43b",
       "sub_prompt": "Inserisci sul campo username pietro.contadini e nel campo password AaN!7aa e clicca Login",
-      "timeout": "8000"
+      "timeout": "10000",
+      "expectations": []
     },
     {
-      "id": "a1ac11fb",
+      "id": "4094c2c9",
       "sub_prompt": "Vai sul menu a tendina: Analisys > Smart compare",
-      "timeout": "5000"
+      "timeout": "5000",
+      "expectations": [
+        "non deve essere presente un selettore che contiene: Indicatori bloccabili"
+      ]
     }
   ]
 }

@@ -2,7 +2,8 @@
     "execution": {
         "entrypoint_url": "https://clienteprova2.guru-hrm.it/pages/login.aspx",
         "headless": false,
-        "steps_file": "aidriven-steps.json"
+        "steps_file": "aidriven-steps.json",
+        "global_expect": "Compare un banner con scritto Application Error"
     },
     "ai_agent":{
         "type": "gpt-4o",
